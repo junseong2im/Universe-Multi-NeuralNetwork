@@ -1,24 +1,25 @@
 """
 olfabind_contrastive.py
 =======================
-OlfaBind Module 1: 감각의 데이터화 및 잠재 공간 형성
+OlfaBind Module 1: Sensory Digitization and Latent Space Formation
 
-희소 벡터 x ∈ {0,1}^N 을 딥러닝 인코더를 통해 3차원 우주 좌표 z⃗ = (zx, zy, zz)로 투영.
-Triplet Margin Loss를 사용하여 비슷한 화학 구조끼리 군집을 이루도록 학습.
+Projects sparse vectors x in {0,1}^N to 3D cosmic coordinates z = (zx, zy, zz)
+via a deep learning encoder.
+Triplet Margin Loss is used to cluster similar chemical structures together.
 
-L = max(0, d(z⃗_a, z⃗_p) - d(z⃗_a, z⃗_n) + α)
-  d = 유클리드 거리, α = 최소 마진
+L = max(0, d(z_a, z_p) - d(z_a, z_n) + alpha)
+  d = Euclidean distance, alpha = minimum margin
 
 Pipeline:
-  constellation (B, N, 128) → SliceEncoder → h (B, N, 256)
-                             → ProjectionHead → z (B, N, 3)  (raw 3D 좌표, 정규화 없음)
+  constellation (B, N, 128) -> SliceEncoder -> h (B, N, 256)
+                             -> ProjectionHead -> z (B, N, 3)  (raw 3D coordinates, no normalization)
   z is used as initial 3D position in the gravitational N-body simulation.
 
 Contrastive Learning (Triplet Margin):
-  - Augmentation: atom-level dropout (p=0.2) + Gaussian noise (σ=0.05)
-  - Anchor/Positive: 같은 분자의 two augmented views
-  - Negative: 배치 내 다른 분자 (hardest negative mining)
-  - Loss: Triplet Margin Loss with margin α=1.0
+  - Augmentation: atom-level dropout (p=0.2) + Gaussian noise (sigma=0.05)
+  - Anchor/Positive: two augmented views of the same molecule
+  - Negative: different molecule within the batch (hardest negative mining)
+  - Loss: Triplet Margin Loss with margin alpha=1.0
 """
 import torch
 import torch.nn as nn
@@ -125,13 +126,13 @@ def triplet_margin_loss(
     """
     Triplet Margin Loss with Hardest Negative Mining.
     
-    수학적 정의:
-      L = max(0, d(z_a, z_p) - d(z_a, z_n) + α)
-    
-    여기서:
-      d = 유클리드 거리
-      α = margin (최소한 유지해야 할 거리 마진)
-      z_n = 배치 내 hardest negative (anchor에 가장 가까운 다른 분자)
+    Mathematical definition:
+      L = max(0, d(z_a, z_p) - d(z_a, z_n) + alpha)
+
+    Where:
+      d = Euclidean distance
+      alpha = margin (minimum distance margin to maintain)
+      z_n = hardest negative in batch (closest different molecule to anchor)
     
     Input:  anchor (M, z_dim), positive (M, z_dim)
     Output: scalar loss
@@ -163,22 +164,22 @@ def triplet_margin_loss(
 
 class SliceLatentModule(nn.Module):
     """
-    OlfaBind Module 1: 감각의 데이터화 및 잠재 공간 형성
-    
-    희소 벡터를 3차원 우주 좌표로 투영하고, Triplet Margin Loss로
-    비슷한 화학 구조끼리 군집을 이루도록 학습.
-    
+    OlfaBind Module 1: Sensory Digitization and Latent Space Formation
+
+    Projects sparse vectors to 3D cosmic coordinates and uses Triplet
+    Margin Loss to cluster similar chemical structures together.
+
     During training:
-      - 두 개의 augmented views 생성
-      - Triplet Margin Loss로 anchor-positive < anchor-negative 거리 학습
-    
+      - Generates two augmented views
+      - Triplet Margin Loss enforces anchor-positive < anchor-negative distance
+
     During inference:
-      - 3D 좌표 반환 (augmentation 없음)
-    
+      - Returns 3D coordinates (no augmentation)
+
     Input:  constellations (B, N, D_atom=128)
             mask           (B, N)
-    Output: z_positions    (B, N, 3)       — 3D 우주 좌표
-            triplet_loss   (scalar)        — Triplet Margin Loss (0.0 during eval)
+    Output: z_positions    (B, N, 3)       -- 3D cosmic coordinates
+            triplet_loss   (scalar)        -- Triplet Margin Loss (0.0 during eval)
     """
     def __init__(
         self,
@@ -228,37 +229,37 @@ class SliceLatentModule(nn.Module):
         Forward pass with Triplet Margin Loss.
         
         Returns:
-            z_positions: (B, N, 3) — scaled 3D 우주 좌표
+            z_positions: (B, N, 3) -- scaled 3D cosmic coordinates
             triplet_loss: scalar — Triplet Margin Loss (0.0 during eval)
         """
         B, N, D = constellations.shape
         
         if self.training:
-            # 두 개의 augmented views 생성 (같은 분자의 노이즈 변형)
+            # Generate two augmented views (noise variants of same molecule)
             view_1 = self.augmenter(constellations)  # (B, N, D)
             view_2 = self.augmenter(constellations)  # (B, N, D)
             
-            # 인코딩: 3D 좌표로 투영
+            # Encoding: project to 3D coordinates
             z_1 = self.encode(view_1)  # (B, N, z_dim)
             z_2 = self.encode(view_2)  # (B, N, z_dim)
             
-            # 유효한 분자만 추출 (Triplet Loss 계산용)
+            # Extract valid molecules only (for Triplet Loss computation)
             valid_mask = mask.bool()  # (B, N)
-            anchor = z_1[valid_mask]    # (M, z_dim) — anchor
-            positive = z_2[valid_mask]  # (M, z_dim) — positive (같은 분자의 다른 view)
+            anchor = z_1[valid_mask]    # (M, z_dim) -- anchor
+            positive = z_2[valid_mask]  # (M, z_dim) -- positive (different view of same molecule)
             
             # Triplet Margin Loss: L = max(0, d(a,p) - d(a,n) + α)
             cl_loss = triplet_margin_loss(anchor, positive, margin=self.margin)
             
-            # View 1의 좌표를 물리 엔진 초기 위치로 사용
+            # Use View 1 coordinates as physics engine initial positions
             z_positions = z_1 * self.position_scale
         else:
-            # 추론: augmentation 없이 직접 인코딩
+            # Inference: encode directly without augmentation
             z = self.encode(constellations)  # (B, N, z_dim)
             z_positions = z * self.position_scale
             cl_loss = torch.tensor(0.0, device=constellations.device)
         
-        # 무효 분자 좌표 제로화
+        # Zero out invalid molecule coordinates
         z_positions = z_positions * mask.unsqueeze(-1)
         
         return z_positions, cl_loss

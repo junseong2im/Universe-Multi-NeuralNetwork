@@ -321,7 +321,7 @@ class OlfaBindPipeline(nn.Module):
 # ======================================================================
 if __name__ == "__main__":
     print("=" * 70)
-    print("  OlfaBind Unified Pipeline — End-to-End Self-Test")
+    print("  OlfaBind Unified Pipeline -- End-to-End Self-Test")
     print("=" * 70)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -423,7 +423,7 @@ if __name__ == "__main__":
         print(f"  Stability: {r['stability'].item():.4f}")
         print(f"  Latent[0]: {r['latent_positions'][0, 0].cpu().numpy()}")
         print(f"  Latent[1]: {r['latent_positions'][0, 1].cpu().numpy()}")
-        print("  PASS ✓")
+        print("  PASS")
     except ImportError:
         print("  SKIP (RDKit not available)")
     
@@ -442,6 +442,6 @@ if __name__ == "__main__":
     print("  PASS")
     
     print("\n" + "=" * 70)
-    print("  ALL TESTS PASSED — OlfaBind Pipeline Production Ready")
+    print("  ALL TESTS PASSED -- OlfaBind Pipeline Production Ready")
     print(f"  Total Parameters: {params['total']:,}")
     print("=" * 70)

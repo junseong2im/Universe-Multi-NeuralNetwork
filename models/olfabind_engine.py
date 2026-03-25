@@ -75,21 +75,21 @@ class ConstellationToCelestial(nn.Module):
 
 class GravitationalEngine(nn.Module):
     """
-    N체 물리 엔진: 향의 병합과 증발 시뮬레이션.
-    
-    Velocity Verlet 적분기를 사용한 N-body 중력 시뮬레이션.
-    
-    수학:
-      m_i · d²r⃗_i/dt² = Σ_{j≠i} G · m_i·m_j / |r⃗_j-r⃗_i|³ · (r⃗_j-r⃗_i)
-      m_i(t) = m_{i,0} · e^{-k·T·t}  (질량 감쇠 = 증발)
-    
-    k = 분자별 고유 휘발 상수 (learnable)
-    T = 피부 온도 (기본 37°C)
-    G = 학습 가능 중력 상수 [0.01, 10.0]
-    
+    N-body physics engine: simulates scent merging and evaporation.
+
+    N-body gravitational simulation using the Velocity Verlet integrator.
+
+    Math:
+      m_i * d^2r_i/dt^2 = sum_{j!=i} G * m_i*m_j / |r_j-r_i|^3 * (r_j-r_i)
+      m_i(t) = m_{i,0} * e^{-k*T*t}  (mass decay = evaporation)
+
+    k = molecule-specific volatility constant (learnable)
+    T = skin temperature (default 37 C)
+    G = learnable gravitational constant [0.01, 10.0]
+
     Input:  masses (B,N,1), positions (B,N,3), velocities (B,N,3), mask (B,N)
     Output: trajectory (B,T,N,3), final_pos (B,N,3), final_vel (B,N,3),
-            mass_history (B,T,N,1) — 시간에 따른 질량 감쇠 이력
+            mass_history (B,T,N,1) -- mass decay history over time
     """
     def __init__(self, n_steps: int = 32, dt: float = 0.01, epsilon: float = 1e-4,
                  accel_clamp: float = 100.0, vel_clamp: float = 50.0,
@@ -197,7 +197,7 @@ class GravitationalEngine(nn.Module):
     def mass_at_time(self, m0: torch.Tensor, t: float,
                      temperature: float = None) -> torch.Tensor:
         """
-        질량 감쇠: m_i(t) = m_{i,0} · exp(-k · T · t)
+                Mass decay: m_i(t) = m_{i,0} * exp(-k * T * t)
         
         Args:
             m0: initial masses (B, N, 1)
@@ -218,7 +218,7 @@ class GravitationalEngine(nn.Module):
         positions: torch.Tensor,  # (B, N, 3)
         velocities: torch.Tensor, # (B, N, 3)
         mask: torch.Tensor,       # (B, N)
-        temperature: float = None # 피부 온도 (기본 37°C)
+        temperature: float = None # skin temperature (default 37 C)
     ):
         B, N, _ = positions.shape
         
@@ -235,7 +235,7 @@ class GravitationalEngine(nn.Module):
         mass_history.append(m_t.unsqueeze(1))
         
         for t in range(self.n_steps):
-            # === 질량 감쇠: m_i(t) = m_{i,0} · exp(-k · T · t) ===
+            # === Mass decay: m_i(t) = m_{i,0} * exp(-k * T * t) ===
             time_val = (t + 1) * self.dt
             m_t = self.mass_at_time(masses, time_val, temperature)
             m_t = m_t * mask.unsqueeze(-1)  # zero out invalid
@@ -458,53 +458,53 @@ class OrbitalStabilityEvaluator(nn.Module):
         mask: torch.Tensor         # (B, N)
     ) -> torch.Tensor:
         """
-        공명/카오스 판별: 궤도 간 거리의 시계열 분석.
-        
-        거리가 무한대로 발산 → '카오스' (역겨운 향)  → score ≈ 0
-        거리가 일정 범위 내 주기성 → '공명' (아름다운 향) → score ≈ 1
-        
-        방법: 인접 궤도의 지수적 발산율 (Lyapunov exponent 근사)
+                Resonance/chaos discrimination: time-series analysis of inter-orbit distances.
+
+        Distance diverging to infinity -> 'chaos' (unpleasant scent) -> score ~ 0
+        Distance periodic within bounds -> 'resonance' (beautiful scent) -> score ~ 1
+
+        Method: exponential divergence rate of adjacent orbits (Lyapunov exponent approximation)
         """
         B, T, N, _ = trajectory.shape
         
         if T < 3 or N < 2:
             return torch.ones(B, device=trajectory.device)
         
-        # 시간에 따른 모든 쌍별 거리 변화 추적
+        # Track pairwise distance changes over time
         # positions at first and last third of trajectory
         T_early = max(1, T // 3)
         T_late = max(T_early + 1, 2 * T // 3)
         
-        # 초기 쌍별 거리
+        # Initial pairwise distances
         pos_early = trajectory[:, :T_early]  # (B, T_early, N, 3)
         pos_late = trajectory[:, T_late:]     # (B, T_rest, N, 3)
         
-        # 초기 평균 쌍별 거리
+        # Mean initial pairwise distance
         d_early_ij = pos_early[:, :, :, None, :] - pos_early[:, :, None, :, :]  # (B,T,N,N,3)
-        d_early = d_early_ij.norm(dim=-1).mean(dim=1)  # (B, N, N) — 시간 평균
+        d_early = d_early_ij.norm(dim=-1).mean(dim=1)  # (B, N, N) -- time average
         
-        # 후기 평균 쌍별 거리
+        # Mean late pairwise distance
         d_late_ij = pos_late[:, :, :, None, :] - pos_late[:, :, None, :, :]  # (B,T,N,N,3)
-        d_late = d_late_ij.norm(dim=-1).mean(dim=1)  # (B, N, N) — 시간 평균
+        d_late = d_late_ij.norm(dim=-1).mean(dim=1)  # (B, N, N) -- time average
         
-        # 발산 비율: d_late / d_early
-        # 값 > 1 → 발산 (카오스), 값 ≈ 1 → 안정 (공명)
+        # Divergence ratio: d_late / d_early
+        # Value > 1 -> divergence (chaos), Value ~ 1 -> stable (resonance)
         divergence = d_late / (d_early + 1e-6)  # (B, N, N)
         
-        # 대각선 제외, 유효 쌍만
+        # Exclude diagonal, valid pairs only
         eye = torch.eye(N, device=trajectory.device).unsqueeze(0)
         pair_mask = mask.unsqueeze(1) * mask.unsqueeze(2) * (1 - eye)
         
-        # 발산 정도의 평균
+        # Mean divergence
         divergence_masked = divergence * pair_mask
         n_pairs = pair_mask.sum(dim=(1, 2)).clamp(min=1.0)
         mean_divergence = divergence_masked.sum(dim=(1, 2)) / n_pairs  # (B,)
         
-        # 공명 점수: 발산이 1에 가까울수록 높음
+        # Resonance score: higher when divergence is close to 1
         # score = 1 / (1 + (divergence - 1)^2)
         chaos_score = 1.0 / (1.0 + (mean_divergence - 1.0) ** 2)
         
-        return chaos_score  # (B,)  — 1.0=완벽 공명, 0.0=카오스
+        return chaos_score  # (B,) -- 1.0=perfect resonance, 0.0=chaos
     
     def compute_energy_trajectory(
         self,
@@ -629,12 +629,12 @@ class OrbitalStabilityEvaluator(nn.Module):
         s_e = self.energy_conservation(trajectory, masses, mask)
         s_r = self.orbital_resonance(trajectory, mask)
         s_c = self.orbital_compactness(trajectory, mask)
-        s_chaos = self.chaos_resonance_score(trajectory, mask)  # 공명/카오스 판별
+        s_chaos = self.chaos_resonance_score(trajectory, mask)  # resonance/chaos score
         
         # Learnable weighted combination → sigmoid
         stability = torch.sigmoid(
             self.alpha * s_e + self.beta * s_r + self.gamma * s_c + self.bias
-        ) * s_chaos  # 카오스면 stability가 0에 가까워짐
+        ) * s_chaos  # chaos reduces stability toward 0
         
         B = trajectory.shape[0]
         N = masses.shape[1]
@@ -676,7 +676,7 @@ class OrbitalStabilityEvaluator(nn.Module):
         mean_init_r = (init_r * mask).sum(dim=-1) / n_valid
         mean_final_r = (final_r * mask).sum(dim=-1) / n_valid
         
-        # Physics embedding: (B, 20) — 카오스 점수 추가
+        # Physics embedding: (B, 20) -- chaos score included
         physics_embedding = torch.cat([
             torch.stack([stability, s_e, s_r, s_c, s_chaos, mean_mass, mean_vel, total_L, 
                          mean_displacement, mean_init_r, mean_final_r], dim=-1),  # (B, 11)
@@ -740,7 +740,7 @@ class PhysicsProcessingEngine(nn.Module):
             constellations, mask, override_positions=override_positions
         )
         
-        # Step 2: N-body 시뮬레이션 (질량 감쇠 포함)
+        # Step 2: N-body simulation (with mass decay)
         trajectory, final_pos, final_vel, mass_history = self.engine(
             masses, positions, velocities, mask
         )

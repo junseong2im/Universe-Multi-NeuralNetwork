@@ -1,22 +1,23 @@
 """
 olfabind_ghost.py
 =================
-OlfaBind Module 2: 조기 피질 (역중력 섭동을 이용한 패턴 복원)
+OlfaBind Module 2: Early Cortex (Pattern Restoration via Anti-Gravity Perturbation)
 
-불완전한 향기 데이터가 들어왔을 때, '완벽한 은하계'로 복원하는 역산 과정.
+When incomplete scent data is received, this module performs an inverse
+computation to restore the 'complete constellation'.
 
-수학적 정의:
-  ΔF⃗ = F⃗_template - F⃗_partial
-  
-  min_{r⃗_p, m_p} || ΔF⃗ - G · Σ_i (m_i · m_p / |r⃗_i - r⃗_p|³) · (r⃗_i - r⃗_p) ||²
+Mathematical definition:
+  dF = F_template - F_partial
 
-  경사하강법으로 유령 질량의 위치(r⃗_p)와 질량(m_p)을 최적화하여
-  오차가 0에 수렴하면 → 누락된 원자의 본래 자리.
+  min_{r_p, m_p} || dF - G * sum_i (m_i * m_p / |r_i - r_p|^3) * (r_i - r_p) ||^2
+
+  Optimizes ghost mass positions (r_p) and masses (m_p) via gradient descent;
+  when the error converges to 0, the missing atoms' original positions are recovered.
 
 Pipeline:
-  - 완전한 constellation → F_template (기준 중력장)
-  - 불완전한 constellation (일부 원자 off) → F_partial
-  - Ghost Mass Optimizer: gradient descent로 (r_p, m_p) 찾아 ΔF 복원
+  - Complete constellation -> F_template (reference gravity field)
+  - Incomplete constellation (some atoms off) -> F_partial
+  - Ghost Mass Optimizer: gradient descent to find (r_p, m_p) and restore dF
 """
 import torch
 import torch.nn as nn
@@ -26,12 +27,13 @@ import math
 
 class GravityFieldComputer(nn.Module):
     """
-    주어진 질량/위치 배열에서 각 위치에 작용하는 중력 벡터장을 계산.
-    
-    F⃗_i = G · Σ_{j≠i} (m_i · m_j / |r⃗_j - r⃗_i|³) · (r⃗_j - r⃗_i)
-    
+    Computes the gravitational vector field acting on each position
+    from the given mass/position arrays.
+
+    F_i = G * sum_{j!=i} (m_i * m_j / |r_j - r_i|^3) * (r_j - r_i)
+
     Input:  positions (B, N, 3), masses (B, N, 1)
-    Output: force_field (B, N, 3) — 각 위치에 작용하는 총 중력
+    Output: force_field (B, N, 3) -- total gravity at each position
     """
     def __init__(self, epsilon: float = 1e-4):
         super().__init__()
@@ -77,24 +79,24 @@ class GravityFieldComputer(nn.Module):
 
 class GhostMassOptimizer(nn.Module):
     """
-    역중력 섭동을 이용한 패턴 복원 모듈.
-    
-    불완전한 향기 데이터에서 누락된 원자(유령 질량)의 위치와 질량을
-    최적화하여 원래의 중력장을 복원.
-    
-    수학:
-      min_{r_p, m_p} || ΔF - G·Σ(m_i·m_p/|r_i-r_p|³)(r_i-r_p) ||²
-    
-    Input:  
-      complete_positions  (B, N, 3)  — 완전한 향기의 원자 위치
-      complete_masses     (B, N, 1)  — 완전한 향기의 원자 질량
-      partial_mask        (B, N)     — 1=존재, 0=누락
-      G                   scalar     — 중력 상수
-    
+    Pattern restoration module using anti-gravity perturbation.
+
+    Optimizes the positions and masses of missing atoms (ghost masses)
+    in incomplete scent data to restore the original gravity field.
+
+    Math:
+      min_{r_p, m_p} || dF - G*sum(m_i*m_p/|r_i-r_p|^3)(r_i-r_p) ||^2
+
+    Input:
+      complete_positions  (B, N, 3)  -- complete scent atom positions
+      complete_masses     (B, N, 1)  -- complete scent atom masses
+      partial_mask        (B, N)     -- 1=present, 0=missing
+      G                   scalar     -- gravitational constant
+
     Output:
-      restored_positions  (B, N, 3)  — 복원된 전체 위치
-      restored_masses     (B, N, 1)  — 복원된 전체 질량
-      restoration_loss    scalar     — 복원 오차 ||ΔF||²
+      restored_positions  (B, N, 3)  -- restored full positions
+      restored_masses     (B, N, 1)  -- restored full masses
+      restoration_loss    scalar     -- restoration error ||dF||^2
     """
     def __init__(
         self,
@@ -112,16 +114,16 @@ class GhostMassOptimizer(nn.Module):
     
     def compute_ghost_force(
         self,
-        existing_positions: torch.Tensor,   # (B, K, 3) — 존재하는 원자들
+        existing_positions: torch.Tensor,   # (B, K, 3) -- existing atoms
         existing_masses: torch.Tensor,       # (B, K, 1)
-        ghost_positions: torch.Tensor,       # (B, G, 3) — 유령 질량 위치
-        ghost_masses: torch.Tensor,          # (B, G, 1) — 유령 질량
+        ghost_positions: torch.Tensor,       # (B, G, 3) -- ghost mass positions
+        ghost_masses: torch.Tensor,          # (B, G, 1) -- ghost masses
         G: torch.Tensor,
     ) -> torch.Tensor:
         """
-        유령 질량들이 기존 원자 위치에 만드는 추가 중력 계산.
-        
-        Returns: ghost_force (B, K, 3) — 유령 질량에 의한 기존 위치의 중력 변화
+        Compute the additional gravity that ghost masses exert on existing atom positions.
+
+        Returns: ghost_force (B, K, 3) -- gravity change at existing positions due to ghosts
         """
         B, K, _ = existing_positions.shape
         _, G_count, _ = ghost_positions.shape
@@ -146,12 +148,12 @@ class GhostMassOptimizer(nn.Module):
         self,
         complete_positions: torch.Tensor,   # (B, N, 3)
         complete_masses: torch.Tensor,       # (B, N, 1)
-        partial_mask: torch.Tensor,          # (B, N) — 1=존재, 0=누락
+        partial_mask: torch.Tensor,          # (B, N) -- 1=present, 0=missing
         G: torch.Tensor,                     # scalar
-        full_mask: torch.Tensor = None,      # (B, N) — 전체 유효 원자 마스크
+        full_mask: torch.Tensor = None,      # (B, N) -- full valid atom mask
     ):
         """
-        누락된 원자를 유령 질량으로 복원.
+        Restore missing atoms using ghost masses.
         
         Returns:
             restored_positions (B, N, 3)
@@ -165,39 +167,39 @@ class GhostMassOptimizer(nn.Module):
             full_mask = torch.ones(B, N, device=device)
         
         # Identify missing atoms
-        missing_mask = full_mask * (1.0 - partial_mask)  # (B, N) — 누락된 위치
+        missing_mask = full_mask * (1.0 - partial_mask)  # (B, N) -- missing positions
         n_missing = missing_mask.sum(dim=1).max().int().item()
         
         if n_missing == 0:
-            # 누락 없음 → 그대로 반환
+            # No missing atoms -> return as-is
             zero_loss = torch.tensor(0.0, device=device, requires_grad=True)
             return complete_positions.clone(), complete_masses.clone(), zero_loss
         
-        # === Step 1: 기준 중력장 (완전한 상태) ===
+        # === Step 1: Reference gravity field (complete state) ===
         F_template = self.gravity_computer(
             complete_positions, complete_masses, G, full_mask
         )  # (B, N, 3)
         
-        # === Step 2: 부분 중력장 (누락 상태) ===
+        # === Step 2: Partial gravity field (missing state) ===
         partial_masses = complete_masses * partial_mask.unsqueeze(-1)
         F_partial = self.gravity_computer(
             complete_positions, partial_masses, G, partial_mask
         )  # (B, N, 3)
         
-        # === Step 3: 결핍 힘 ===
-        delta_F = F_template - F_partial  # (B, N, 3) — 복원해야 할 중력 차이
+        # === Step 3: Deficit force ===
+        delta_F = F_template - F_partial  # (B, N, 3) -- gravity difference to restore
         
-        # 존재하는 원자에서만 결핍 힘 계산 (누락된 위치는 무시)
+        # Compute deficit force only at existing atoms (ignore missing positions)
         delta_F = delta_F * partial_mask.unsqueeze(-1)  # (B, N, 3)
         
-        # === Step 4: Ghost Mass 최적화 ===
-        # 누락된 원자 위치의 초기 추정 = 원래 위치 + 약간의 노이즈
-        ghost_pos = complete_positions.detach().clone()  # 초기 추정
+        # === Step 4: Ghost Mass Optimization ===
+        # Initial estimate for missing atom positions = original + small noise
+        ghost_pos = complete_positions.detach().clone()  # initial estimate
         ghost_pos = ghost_pos + torch.randn_like(ghost_pos) * 0.1
         ghost_pos = ghost_pos * missing_mask.unsqueeze(-1)
         ghost_pos.requires_grad_(True)
         
-        # 유령 질량 초기값
+        # Ghost mass initial values
         ghost_mass_raw = torch.full(
             (B, N, 1), self.ghost_mass_init.item(),
             device=device, requires_grad=True
@@ -214,23 +216,23 @@ class GhostMassOptimizer(nn.Module):
         for step in range(self.n_optim_steps):
             inner_optimizer.zero_grad()
             
-            # 유령 질량은 양수로 제한
+            # Constrain ghost masses to be positive
             ghost_masses_pos = F.softplus(ghost_mass_raw) * missing_mask.unsqueeze(-1)
             
-            # 유령 위치도 누락 위치에만 적용
+            # Apply ghost positions only at missing positions
             ghost_pos_masked = ghost_pos * missing_mask.unsqueeze(-1)
             
-            # 유령 질량이 기존 원자 위치에 만드는 힘
-            # 존재하는 원자 위치들 추출
+            # Force that ghost masses exert on existing atom positions
+            # Extract existing atom positions
             exist_mask = partial_mask.bool()
             
-            # 전체 위치에서 유령에 의한 힘 계산 (간단한 버전)
+            # Compute ghost-induced force at all positions (simplified)
             ghost_force = self.compute_ghost_force(
                 complete_positions, complete_masses * partial_mask.unsqueeze(-1),
                 ghost_pos_masked, ghost_masses_pos, G
             )  # (B, N, 3)
             
-            # 차이: ||ΔF - ghost_force||²
+            # Residual: ||dF - ghost_force||^2
             ghost_force_at_existing = ghost_force * partial_mask.unsqueeze(-1)
             residual = delta_F - ghost_force_at_existing  # (B, N, 3)
             optim_loss = (residual ** 2).sum() / max(partial_mask.sum().item(), 1.0)
@@ -243,8 +245,8 @@ class GhostMassOptimizer(nn.Module):
             optim_loss.backward(retain_graph=True)
             inner_optimizer.step()
         
-        # === Step 5: 복원된 상태 조합 ===
-        # 존재하는 원자는 원래 위치, 누락 원자는 최적화된 유령 위치
+        # === Step 5: Combine restored state ===
+        # Existing atoms keep original positions, missing atoms use optimized ghost positions
         restored_positions = (
             complete_positions * partial_mask.unsqueeze(-1) +
             best_ghost_pos * missing_mask.unsqueeze(-1)
@@ -255,7 +257,7 @@ class GhostMassOptimizer(nn.Module):
             F.softplus(best_ghost_mass) * missing_mask.unsqueeze(-1)
         )
         
-        # 최종 restoration loss (differentiable through original path)
+        # Final restoration loss (differentiable through original path)
         restoration_loss = (delta_F ** 2).sum() / max(partial_mask.sum().item(), 1.0)
         
         return restored_positions, restored_masses, restoration_loss
@@ -266,7 +268,7 @@ class GhostMassOptimizer(nn.Module):
 # ======================================================================
 if __name__ == "__main__":
     print("=" * 60)
-    print("OlfaBind Module 2 — Ghost Mass Restoration Self-test")
+    print("OlfaBind Module 2 -- Ghost Mass Restoration Self-test")
     print("=" * 60)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -291,11 +293,11 @@ if __name__ == "__main__":
     print("  PASS")
     
     # --- Test 2: No missing atoms → zero loss ---
-    print("\n[Test 2] No missing atoms → zero loss...")
+    print("\n[Test 2] No missing atoms -> zero loss...")
     ghost_opt = GhostMassOptimizer(n_optim_steps=5).to(device)
     
     full_mask = torch.ones(B, N, device=device)
-    partial_mask = torch.ones(B, N, device=device)  # 모두 존재
+    partial_mask = torch.ones(B, N, device=device)  # all present
     
     restored_pos, restored_mass, loss = ghost_opt(
         positions, masses, partial_mask, G_val, full_mask
@@ -305,9 +307,9 @@ if __name__ == "__main__":
     print("  PASS")
     
     # --- Test 3: Missing atoms → positive loss ---
-    print("\n[Test 3] Missing atoms → positive loss...")
+    print("\n[Test 3] Missing atoms -> positive loss...")
     partial_mask_with_missing = torch.ones(B, N, device=device)
-    partial_mask_with_missing[:, 6:] = 0  # 마지막 2개 원자 누락
+    partial_mask_with_missing[:, 6:] = 0  # last 2 atoms missing
     
     restored_pos, restored_mass, loss = ghost_opt(
         positions, masses, partial_mask_with_missing, G_val, full_mask
@@ -317,7 +319,7 @@ if __name__ == "__main__":
     print(f"  Restored positions shape: {restored_pos.shape}")
     print(f"  Restored masses shape: {restored_mass.shape}")
     
-    # 존재하는 원자 위치는 변하지 않아야 함
+    # Existing atom positions should remain unchanged
     existing_match = (restored_pos[:, :6] - positions[:, :6]).abs().max().item()
     print(f"  Existing atom position diff: {existing_match:.1e} (should be ~0)")
     assert existing_match < 1e-6, "Existing atoms must keep original positions"

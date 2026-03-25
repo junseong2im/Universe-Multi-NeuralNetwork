@@ -1,21 +1,21 @@
 """
 v25_optimization_trio.py
 ========================
-OlfaBind v25: 3가지 최적화 (v18 원본 구조 유지)
+OlfaBind v25: Three Optimization Strategies (preserving v18 original structure)
 
-v19~v24 교훈: 구조 변경은 모두 baseline 이하.
-→ v18 원본 구조 그대로 + 학습/데이터/HP만 최적화
+Lessons from v19~v24: structural changes all underperform baseline.
+-> Keep v18 original structure + optimize training/data/HP only
 
-STRATEGY A: 학습 전략 최적화
+STRATEGY A: Training strategy optimization
   - 10-restart + SWA + warmup + cosine + grad accumulation
-  
-STRATEGY B: 데이터 증강
-  - Bushdid discrimination → pseudo-similarity pre-training
-  - 더 많은 augmented pairs
-  
-STRATEGY C: 하이퍼파라미터 탐색
+
+STRATEGY B: Data augmentation
+  - Bushdid discrimination -> pseudo-similarity pre-training
+  - More augmented pairs
+
+STRATEGY C: Hyperparameter search
   - lr, batch_size, T, dt grid search
-  - 최적 조합으로 full CV
+  - Full CV with optimal combination
 """
 import os, sys, json, time, csv, math, copy
 import numpy as np

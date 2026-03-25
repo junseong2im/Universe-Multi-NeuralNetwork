@@ -3,26 +3,26 @@ v24_internal_improvement.py
 ===========================
 OlfaBind v24: Internal Structure + Data Enhancement + Stability
 
-v19~v23 교훈: 물리 엔진 위에 추가 모듈은 성능 저하.
-→ 물리 엔진 내부만 개선 + 데이터 강화 + 안정성 극대화
+Lessons from v19~v23: adding modules on top of the physics engine degrades performance.
+-> Improve physics engine internals only + enhance data + maximize stability
 
-INTERNAL IMPROVEMENTS (내부 구조):
-  1. Deeper mapper: Linear → 2-layer MLP with LayerNorm + residual
-  2. Richer physics embedding: 20D → 32D (쌍별 거리 통계, 궤적 분산 추가)
+INTERNAL IMPROVEMENTS:
+  1. Deeper mapper: Linear -> 2-layer MLP with LayerNorm + residual
+  2. Richer physics embedding: 20D -> 32D (pairwise distance stats, trajectory variance added)
   3. Better projection head: wider + dropout for regularization
 
-DATA ENHANCEMENT (데이터 강화):
-  1. Bushdid discrimination → pseudo-similarity pre-training (6864 pairs)
-  2. Cross-validation에 augmented pairs 포함
+DATA ENHANCEMENT:
+  1. Bushdid discrimination -> pseudo-similarity pre-training (6864 pairs)
+  2. Include augmented pairs in cross-validation
   3. Label smoothing
 
-STABILITY (안정성):
+STABILITY:
   1. 10 restarts with best selection
   2. SWA (Stochastic Weight Averaging)
   3. Warmup + cosine decay
   4. Gradient accumulation (effective batch=64)
 
-자유도: 그대로 유지 (3D positions, single-scale T=4)
+Degrees of freedom: unchanged (3D positions, single-scale T=4)
 """
 import os, sys, json, time, csv, math, copy
 import numpy as np
@@ -182,7 +182,7 @@ class ImprovedMapper(nn.Module):
         return masses, positions, velocities
 
 # ======================================================================
-# INTERNAL IMPROVEMENT 2: Richer Physics Embedding (20D → 32D)
+# INTERNAL IMPROVEMENT 2: Richer Physics Embedding (20D -> 32D)
 # ======================================================================
 class RicherEvaluator(OrbitalStabilityEvaluator):
     """
@@ -286,7 +286,7 @@ class ImprovedPhysicsEngine(nn.Module):
 # ======================================================================
 # v24 MODEL
 # ======================================================================
-PHYS_EMB_DIM = 32  # 20 → 32
+PHYS_EMB_DIM = 32  # 20 -> 32
 
 class OlfaBindV24(nn.Module):
     """

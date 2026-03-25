@@ -3,20 +3,20 @@ v23_freedom_stability.py
 ========================
 OlfaBind v23: Maximum Freedom + Maximum Stability
 
-FREEDOM (자유도 대폭 증가):
-  1. Multi-scale simulation: T=2,4,8 동시 실행 → 3배 물리 특성
-  2. Trajectory Attention: 궤적에서 특성을 학습으로 추출 (hand-crafted 제거)
-  3. 8D latent space: 3D→8D (더 넓은 표현 공간)
-  4. Deeper/wider projection: 128→256→128
+FREEDOM (greatly increased degrees of freedom):
+  1. Multi-scale simulation: T=2,4,8 simultaneous -> 3x physics features
+  2. Trajectory Attention: learned feature extraction from trajectories (removing hand-crafted)
+  3. 8D latent space: 3D->8D (wider representation space)
+  4. Deeper/wider projection: 128->256->128
   5. Physics losses as ultra-weak hints: lambda=1e-5
 
-STABILITY (안정성 대폭 증가):
-  1. SWA (Stochastic Weight Averaging): 후반부 weights 평균
-  2. 10 restarts: 최적 모델 선택 확률 극대화
-  3. Warmup + cosine decay: 안정적 학습 시작
-  4. Mixup augmentation: 일반화 향상
-  5. Dropout in heads: 과적합 방지
-  6. Gradient accumulation: 효과적 batch=64
+STABILITY (greatly increased stability):
+  1. SWA (Stochastic Weight Averaging): average late-stage weights
+  2. 10 restarts: maximize chance of finding optimal model
+  3. Warmup + cosine decay: stable training start
+  4. Mixup augmentation: improve generalization
+  5. Dropout in heads: prevent overfitting
+  6. Gradient accumulation: effective batch=64
 """
 import os, sys, json, time, csv, math, copy
 import numpy as np
@@ -119,7 +119,7 @@ class OlfaBindDataset(Dataset):
         }
 
 # ======================================================================
-# FREEDOM 1: Trajectory Attention — 궤적에서 특성을 학습으로 추출
+# FREEDOM 1: Trajectory Attention -- learned feature extraction from trajectories
 # ======================================================================
 class TrajectoryAttention(nn.Module):
     """
@@ -181,7 +181,7 @@ class TrajectoryAttention(nn.Module):
         return self.out_proj(out)  # (B, d_out)
 
 # ======================================================================
-# FREEDOM 2: Multi-Scale Physics — T=2,4,8 동시 실행
+# FREEDOM 2: Multi-Scale Physics -- T=2,4,8 simultaneous
 # ======================================================================
 class MultiScalePhysics(nn.Module):
     """

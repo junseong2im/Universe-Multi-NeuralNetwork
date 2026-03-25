@@ -1,0 +1,9 @@
+Data Availability Statement
+
+The source code and data used in this study are publicly available at https://github.com/junseong2im/UMN.
+
+The Snitz et al. (2013) mixture similarity dataset is publicly available through the DREAM Olfaction Challenge (https://www.dreamchallenges.org/).
+
+The Ravia et al. (2020) dataset is available in the supplementary materials of the original publication.
+
+All experimental results reported in this paper are reproducible using the scripts provided in the repository.
